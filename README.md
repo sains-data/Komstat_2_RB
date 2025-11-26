@@ -4,7 +4,7 @@
 [![RMarkdown](https://img.shields.io/badge/RMarkdown-75AADB?style=flat&logo=markdown&logoColor=white)](https://rmarkdown.rstudio.com/)
 [![GIS](https://img.shields.io/badge/Spatial%20Data-SF-green?style=flat)]()
 
-**Quick Access:** 🎞️ [Video](https://drive.google.com/file/d/1Je4fRD05nJuFM3gvSNsX5UpNi6BoEQeT/view?usp=drive_link) • 📄 [Laporan PDF](Laporan_2_RB.pdf) • 🖼️ [Poster](Poster_2_RB.pdf)
+**Quick Access:** 🎞️ [Video](https://drive.google.com/file/d/1Je4fRD05nJuFM3gvSNsX5UpNi6BoEQeT/view?usp=drive_link) • 📄 [Laporan PDF](Laporan_2_RB.pdf) • 🖼️ [Poster](Poster_2_RB.png)
 
 Tugas Besar Komputasi Statistik - Program Studi Sains Data, Institut Teknologi Sumatera
 
