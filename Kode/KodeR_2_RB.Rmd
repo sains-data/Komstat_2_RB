@@ -1,0 +1,294 @@
+---
+title: "tubes"
+author: "Kelompok_02"
+date: "2025-11-18"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(scales)
+library(ggthemes)
+library(patchwork)
+library(dplyr)
+library(stringr)
+library(sf)
+library(geodata)
+library(viridis)
+library(transformr)
+library(ggplot2)
+library(gganimate)
+
+gadm_id <- geodata::gadm(
+  country = "IDN",
+  level   = 2,
+  path    = "/home/fadil/Downloads/Komstat_TUBES_dtaset/gadm"
+)
+
+adm2 <- st_as_sf(gadm_id)
+```
+
+```{r}
+library(readr)
+df_guru <- read.csv("/home/fadil/Downloads/Komstat_TUBES_dtaset/dataset/dataseet.csv")
+```
+
+```{r}
+# Ringkasan deskriptif
+df_guru %>%
+  group_by(Tahun) %>%
+  summarise(
+    total_murid = sum(Jumlah.Murid.SD, na.rm = TRUE),
+    total_guru = sum(Jumlah.Guru.SD, na.rm = TRUE),
+    total_sekolah = sum(Jumlah.Sekolah.SD, na.rm = TRUE),
+    rasio_rata2 = mean(Jumlah.Murid.SD / Jumlah.Guru.SD, na.rm = TRUE)
+  )
+```
+
+```{r}
+summary(df_guru)
+```
+
+```{r}
+df_guru %>%
+  group_by(Tahun) %>%
+  summarise(Total_Murid = sum(Jumlah.Murid.SD, na.rm = TRUE)) %>%
+  ggplot(aes(Tahun, Total_Murid)) +
+  geom_line(linewidth = 1.3) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Tren Jumlah Murid SD di Lampung (2019–2024)",
+    subtitle = "Total murid SD seluruh kabupaten/kota per tahun",
+    x = "Tahun",
+    y = "Jumlah Murid"
+  )
+```
+
+```{r}
+df_guru %>%
+  group_by(Kabupaten.Kota) %>%
+  summarise(Total_Sekolah = sum(Jumlah.Sekolah.SD)) %>%
+  ggplot(aes(reorder(Kabupaten.Kota, Total_Sekolah), Total_Sekolah)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Jumlah Sekolah SD per Kabupaten/Kota (Agregat 2019–2024)",
+    x = "",
+    y = "Jumlah Sekolah"
+  )
+```
+
+```{r}
+df_guru %>%
+  mutate(Rasio_Murid_per_Guru = Jumlah.Murid.SD / Jumlah.Guru.SD) %>%
+  group_by(Kabupaten.Kota) %>%
+  summarise(Rasio = mean(Rasio_Murid_per_Guru, na.rm = TRUE)) %>%
+  ggplot(aes(reorder(Kabupaten.Kota, Rasio), Rasio)) +
+  geom_col(fill = "#2E86AB") +
+  coord_flip() +
+  labs(
+    title = "Rasio Murid per Guru SD di Lampung (Rata-rata 2019–2024)",
+    x = "",
+    y = "Rasio Murid per Guru"
+  )
+```
+
+```{r}
+df_guru %>%
+  ggplot(aes(Jumlah.Guru.SD, Jumlah.Murid.SD, color = Kabupaten.Kota)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Hubungan Jumlah Guru dan Murid SD di Lampung",
+    subtitle = "Per kabupaten/kota, seluruh tahun digabung",
+    x = "Jumlah Guru",
+    y = "Jumlah Murid"
+  )
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(sf)
+
+# Filter only Lampung province
+lampung_sf <- adm2 %>%
+  filter(toupper(NAME_1) == "LAMPUNG") %>%
+  mutate(
+    nama_adm_clean = toupper(NAME_2) %>%
+      str_replace_all("\\s+", " ") %>%
+      str_trim()
+  )
+
+df_guru <- df_guru %>%
+  mutate(
+    kab_clean = toupper(Kabupaten.Kota) %>%
+      str_replace_all("\\s+", " ") %>%
+      str_trim()
+  )
+
+df_guru$kab_clean <- df_guru$kab_clean %>%
+  str_replace("^KOTA BANDAR LAMPUNG$", "BANDAR LAMPUNG") %>%
+  str_replace("^KOTA METRO$", "METRO")
+
+lampung_merged <- lampung_sf %>%
+  left_join(df_guru, by = c("nama_adm_clean" = "kab_clean"))
+
+lampung_merged %>% filter(is.na(Jumlah.Murid.SD)) %>% pull(nama_adm_clean)
+
+library(ggplot2)
+
+ggplot(lampung_merged) +
+  geom_sf(aes(fill = Jumlah.Murid.SD), color = "white", size = 0.3) +
+  scale_fill_distiller(palette = "Blues", direction = 1) +
+  labs(
+    title = "Distribusi Jumlah Murid SD per Kabupaten/Kota di Provinsi Lampung",
+    subtitle = "Sumber: BPS 2019–2024",
+    fill = "Jumlah Murid"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid = element_blank()
+  )
+```
+
+```{r animation, message=FALSE, warning=FALSE, fig.width=8, fig.height=6, dev='svg'}
+# =============================
+# Libraries
+# =============================
+library(tidyverse)
+library(sf)
+library(geodata)
+library(ggplot2)
+library(gganimate)
+library(viridis)
+library(transformr)
+
+# =============================
+# 1) Normalisasi df_guru
+# =============================
+normalize_name <- function(x) {
+  x %>%
+    toupper() %>%
+    str_replace_all("\\.", "") %>%
+    str_replace_all("^KABUPATEN\\s+", "") %>%
+    str_replace_all("^KOTA\\s+", "") %>%
+    str_replace_all("\\s+", " ") %>%
+    str_trim()
+}
+
+df_guru <- df_guru %>%
+  mutate(
+    kab_clean = normalize_name(Kabupaten.Kota),
+    Tahun = as.integer(Tahun)
+  )
+
+# =============================
+# 2) Ambil shapefile Indonesia level 2
+# =============================
+
+# Tambah kolom kab_clean (nama kabupaten)
+adm2 <- adm2 %>%
+  mutate(
+    kab_clean = NAME_2 %>%
+      toupper() %>%
+      str_replace_all("\\.", "") %>%
+      str_replace_all("\\s+", " ") %>%
+      str_trim()
+  )
+
+# =============================
+# 3) Filter hanya Provinsi Lampung
+# =============================
+adm2_lampung <- adm2 %>%
+  filter(NAME_1 == "Lampung")
+
+# =============================
+# 4) Fix mismatch nama
+# =============================
+mapping_fix <- tribble(
+  ~kab_clean,        ~kab_fix,
+  "PESISIR BARAT",   "PESISIRBARAT"
+)
+
+df_guru <- df_guru %>%
+  left_join(mapping_fix, by = "kab_clean") %>%
+  mutate(kab_join = if_else(!is.na(kab_fix), kab_fix, kab_clean))
+
+# =============================
+# 5) Agregasi data
+# =============================
+df_agg <- df_guru %>%
+  group_by(Tahun, kab_join) %>%
+  summarise(
+    Jumlah.Sekolah.SD = sum(Jumlah.Sekolah.SD),
+    Jumlah.Guru.SD    = sum(Jumlah.Guru.SD),
+    Jumlah.Murid.SD   = sum(Jumlah.Murid.SD),
+    .groups = "drop"
+  ) %>%
+  mutate(Rasio_Murid_per_Guru = Jumlah.Murid.SD / Jumlah.Guru.SD)
+
+
+# 6) Menyiapkan Tahun dan list kabupaten
+years <- sort(unique(df_agg$Tahun))
+all_kab <- adm2_lampung$kab_clean
+
+adm2_expand_tbl <- expand_grid(
+  kab_clean = all_kab,
+  Tahun = years
+) %>%
+  left_join(df_agg, by = c("kab_clean" = "kab_join", "Tahun" = "Tahun"))
+
+geom_df <- tibble(
+  kab_clean = adm2_lampung$kab_clean,
+  geometry = st_geometry(adm2_lampung)
+)
+
+adm2_expand <- adm2_expand_tbl %>%
+  left_join(geom_df, by = "kab_clean")
+
+if(!"geometry" %in% colnames(adm2_expand)) {
+  stop("geometry column not found in adm2_expand after join — check adm2_lampung geometry extraction")
+}
+
+adm2_expand <- st_as_sf(adm2_expand, sf_column_name = "geometry", crs = st_crs(adm2_lampung))
+
+message("Rows (adm2_expand): ", nrow(adm2_expand))
+message("Unique years: ", paste(sort(unique(adm2_expand$Tahun)), collapse = ", "))
+message("Has geometry?: ", "geometry" %in% colnames(adm2_expand))
+print(head(adm2_expand)[, c("kab_clean", "Tahun", "Jumlah.Murid.SD", "Rasio_Murid_per_Guru")])
+
+# 7) Static map (example: 2024)
+ggplot(adm2_expand %>% filter(Tahun == max(years, na.rm = TRUE))) +
+  geom_sf(aes(fill = Rasio_Murid_per_Guru), color = "white", size = 0.2) +
+  scale_fill_viridis_c(direction = -1, na.value = "grey90") +
+  labs(title = paste0("Rasio Murid per Guru SD — Lampung (", max(years, na.rm = TRUE), ")")) +
+  theme_minimal()
+
+# 8) Animated map
+p_anim <- ggplot(adm2_expand) +
+  geom_sf(aes(fill = Rasio_Murid_per_Guru), color = "white", size = 0.15) +
+  scale_fill_viridis_c(option = "D", na.value = "grey90", direction = -1) +
+  labs(
+    title = "Rasio Murid per Guru SD — Tahun: {frame_time}",
+    subtitle = "Provinsi Lampung"
+  ) +
+  theme_minimal() +
+  transition_time(Tahun) +
+  ease_aes("cubic-in-out")
+
+anim <- animate(
+  p_anim,
+  nframes = length(years) * 10,
+  fps = 6,
+  width = 900,
+  height = 700,
+  renderer = magick_renderer()
+)
+```
